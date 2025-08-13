@@ -8,14 +8,14 @@ const socketIdToRoom = {};  // socket.id => roomId
 
 const app = express();
 app.use(cors({
-    origin: "https://videochat-two.vercel.app/", 
+    origin: "https://videochat-two.vercel.app", 
     methods: ["GET", "POST"],
     credentials: true
   }));
 const server = createServer(app);
 const io = new Server(server, {
     cors: {
-      origin: "https://videochat-two.vercel.app/", 
+      origin: "https://videochat-two.vercel.app", 
       methods: ["GET", "POST"],
       credentials: true
     }
