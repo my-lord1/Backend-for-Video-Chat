@@ -2,11 +2,11 @@ import { Server } from "socket.io";
 import { createServer } from "http";
 import express  from "express";
 import cors from "cors";
-
+const socketIdToDevices= {};
 const roomToSocketIds = {}; // roomId => Set of socket IDs
 const socketIdToRoom = {};  // socket.id => roomId
 const socketIdToUserName = {}; // socket.id => Username
-const socketIdToDevices= {}; // socket.id => devices list
+const roomIdToScreenShare = {}; // roomId => socketid of screenshare user
 
 const app = express();
 app.use(cors({
@@ -37,7 +37,8 @@ io.on("connection", (socket) => {
         roomToSocketIds[roomId].add(socket.id)
         socketIdToRoom[socket.id] = roomId;
         socketIdToUserName[socket.id] = userName //assinging socketid to username
-        console.log("socket -> userName:", socketIdToRoom)
+        socket.emit("peer-usernames", {peerusernames: socketIdToUserName});
+        console.log("socket -> userName:", socketIdToUserName);
         console.log("Room Map:", roomToSocketIds);
         console.log("Socket → Room:", socketIdToRoom);
 
@@ -48,11 +49,14 @@ io.on("connection", (socket) => {
             }
         }
         const existingPeers = Array.from(roomToSocketIds[roomId]).filter(id => id !== socket.id);
-        socket.emit("existing-peers", { peers: existingPeers });
+        
+        socket.emit("existing-peers", { peers: existingPeers});
+        const sharerId = roomIdToScreenShare[roomId] || null;
+        socket.emit("screen-share-status", { sharerId });
         console.log(`User ${socket.id} joined room ${roomId}`);
     })
 
-    socket.on("signal", ({ to, type, payload }) => {
+    socket.on("signal", ({ to, type, payload, remoteName2 }) => {
         const fromRoom = socketIdToRoom[socket.id]; 
         if (!fromRoom) return; 
 
@@ -63,7 +67,8 @@ io.on("connection", (socket) => {
                 io.to(to).emit("signal", {
                     from: socket.id,
                     type, 
-                    payload
+                    payload,
+                    remoteName2: socketIdToUserName[socket.id]
                 });
             }
         } else {
@@ -71,15 +76,11 @@ io.on("connection", (socket) => {
             socket.to(fromRoom).emit("signal", {
                 from: socket.id,
                 type,
-                payload
+                payload,
+                remoteName2: socketIdToUserName[socket.id]
             });
     }
-    console.log(
-        `Signal from ${socket.id} (${type}) → ${
-            to || "all peers in room"
-        } payload:`,
-        JSON.stringify(payload, null, 2)
-    );
+
     });
 
 
@@ -89,8 +90,8 @@ io.on("connection", (socket) => {
             roomToSocketIds[roomId].delete(socket.id);
             delete socketIdToRoom[socket.id];
             delete socketIdToUserName[socket.id];
-            delete socketIdToDevices[socket.id]
-            
+            delete roomIdToScreenShare[roomId];
+            delete socketIdToDevices[socket.id];
             io.in(roomId).emit("users-box", {
                 devices: socketIdToDevices// changed to send the hashmap
             })
@@ -98,16 +99,48 @@ io.on("connection", (socket) => {
             for (let peerid of roomToSocketIds[roomId]) {
                 io.to(peerid).emit("user-disconnected", {socketId: socket.id});
             }
-
             if (roomToSocketIds[roomId].size === 0) {
                 delete roomToSocketIds[roomId];
             }
-
+            if (roomIdToScreenShare[roomId] === socket.id) {
+              delete roomIdToScreenShare[roomId];
+              
+              socket.to(roomId).emit("screen-share-state-update", {
+                isActive: false,
+                sharerId: null,
+                sharerSocketId: null
+              });
+            }
         }
         console.log(`User ${socket.id} disconnected from room ${roomId}`);
     })
 
-    socket.on("sendMessage", ({roomId, userName, message}) => {
+    socket.on("start-screen-share", ({ roomId }) => {
+        const current = roomIdToScreenShare[roomId];
+        if (current && current !== socket.id) {
+          socket.emit("screen-share-already-active");
+          return;
+        }
+        roomIdToScreenShare[roomId] = socket.id;
+        io.to(roomId).emit("screen-share-state-update", {
+          isActive: true,
+          sharerId: socket.id,
+          sharerSocketId: socket.id
+        });
+      });
+    
+      socket.on("stop-screen-share", ({ roomId }) => {
+        if (roomIdToScreenShare[roomId] === socket.id) {
+          delete roomIdToScreenShare[roomId];
+          io.to(roomId).emit("screen-share-state-update", {
+            isActive: false,
+            sharerId: null,
+            sharerSocketId: null
+          });
+        }
+      });
+
+      socket.on("sendMessage", ({roomId, userName, message}) => {
         console.log("Emitting to room:", roomId); 
         io.in(roomId).emit("chat-box", {
             socketId: socket.id, 
@@ -117,23 +150,31 @@ io.on("connection", (socket) => {
         })
         console.log("Message sent to room", message); 
     })
-    
-   
     socket.on("seeUsers", ({roomId, userName, isvideoON, isaudioON})=> {
-        socketIdToDevices[socket.id] = {
-            userName, 
-            isvideoON, 
-            isaudioON
-        }
-        console.log("opened the seeUsers event", isvideoON, isaudioON);
-        io.in(roomId).emit("users-box", {
-            devices: socketIdToDevices // changed to send the hashmap
-        })
-        console.log("Message sent to room");
-    })
+      socket.join(roomId)
+      socketIdToDevices[socket.id] = {
+          userName, 
+          isvideoON, 
+          isaudioON
+      }
+      console.log("opened the seeUsers event", isvideoON, isaudioON);
+      io.in(roomId).emit("users-box", {
+          devices: socketIdToDevices // changed to send the hashmap
+      })
+      console.log("Message sent to room");
+  })
+
+  socket.on("disconnect", ({roomId})=> {
+      delete socketIdToDevices[socket.id];
+      io.in(roomId).emit("users-box", {
+          devices: socketIdToDevices// changed to send the hashmap
+      })
+  })
+
+
 });
 
 server.listen(4000, () => {
-    console.log(`server listening on port 3000`);
+    console.log(`server listening on port 4000`);
   });
-        
+//9
