@@ -15,8 +15,8 @@ It consists of a frontend for the user interface and a backend for signaling and
 - Screen sharing support  
 
 ### Demo  
-👉 [Live Demo](https://your-deployed-link.com)  
-*(If the link doesn’t work, check the note below.)*  
+👉 [Live Demo](https://backend-for-video-chat.onrender.com)  
+*(Signalling server for webrtc has to work everytime. If the link doesn’t work, clone the project with your turn servers and test it out.)*  
 
 ### Setup  
 ```bash
