@@ -25,12 +25,10 @@ const io = new Server(server, {
   //
 
 io.on("connection", (socket) => {
-    console.log('a user connected');
     socket.emit('hello', { message: 'Hello from server!' });
 
     socket.on("join-room", ( {roomId, userName} )=> {
         socket.join(roomId)
-        console.log("roomID", roomId)
         if (!roomToSocketIds[roomId]){
             roomToSocketIds[roomId] = new Set(); 
         }
@@ -39,10 +37,6 @@ io.on("connection", (socket) => {
         socketIdToRoom[socket.id] = roomId;
         socketIdToUserName[socket.id] = userName //assinging socketid to username
         socket.emit("peer-usernames", {peerusernames: socketIdToUserName});
-        console.log("socket -> userName:", socketIdToUserName);
-        console.log("Room Map:", roomToSocketIds);
-        console.log("Socket → Room:", socketIdToRoom);
-
 
         for(let peerid of roomToSocketIds[roomId]) {
             if (peerid !== socket.id) {
@@ -54,7 +48,6 @@ io.on("connection", (socket) => {
         socket.emit("existing-peers", { peers: existingPeers});
         const sharerId = roomIdToScreenShare[roomId] || null;
         socket.emit("screen-share-status", { sharerId });
-        console.log(`User ${socket.id} joined room ${roomId}`);
     })
 
     socket.on("signal", ({ to, type, payload, remoteName2 }) => {
@@ -113,7 +106,6 @@ io.on("connection", (socket) => {
               });
             }
         }
-        console.log(`User ${socket.id} disconnected from room ${roomId}`);
     })
 
     socket.on("start-screen-share", ({ roomId }) => {
@@ -142,14 +134,12 @@ io.on("connection", (socket) => {
       });
 
       socket.on("sendMessage", ({roomId, userName, message}) => {
-        console.log("Emitting to room:", roomId); 
         io.in(roomId).emit("chat-box", {
             socketId: socket.id, 
             userName,
             message,
             ts: Date.now(),
         })
-        console.log("Message sent to room", message); 
     })
     socket.on("seeUsers", ({roomId, userName, isvideoON, isaudioON})=> {
       socket.join(roomId)
@@ -158,17 +148,14 @@ io.on("connection", (socket) => {
           isvideoON, 
           isaudioON
       }
-      console.log("opened the seeUsers event", isvideoON, isaudioON);
       io.in(roomId).emit("users-box", {
           devices: socketIdToDevices // changed to send the hashmap
       })
-      console.log("Message sent to room");
   })
 
   socket.on("disconnect", ({roomId})=> {
       delete socketIdToDevices[socket.id];
       io.in(roomId).emit("users-box", {
-          devices: socketIdToDevices// changed to send the hashmap
       })
   })
 
